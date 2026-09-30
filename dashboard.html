@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | MOJAKS.CO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 flex">
+<script src="app.js"></script>
+<script>
+let F='',Q='',E=null,CE=null,AE=null; // filter status, pencarian produk, id produk yang diedit
+const O=()=>L('orders',[]),P=()=>L('products',[]),C=()=>U().filter(u=>u.role=='user'),
+PAID=['Paid','Shipped','Delivered'],STS=['Unpaid','Verifying','Paid','Shipped','Delivered','Cancelled'],
+rev=()=>O().filter(o=>PAID.includes(o.status)).reduce((a,o)=>a+o.total,0),
+file=(l)=>`<div><label class="${lb}">${l}</label><input type="file" name="f" accept="image/*" class="${ip}"></div>`,
+pform=()=>{const p=P().find(p=>p.id==E)||{};return`<form onsubmit="A.save(event)" class="space-y-4">${fld('Product Name','name',esc(p.name))}${fld('Price (Rp)','price',p.price,'number')}${fld('Old Price (Rp, for Sale)','old',p.old||'','number',1)}<div><label class="${lb}">Category</label><select name="cat" class="${ip}">${L('cats',[]).map(x=>x.name).map(c=>`<option ${p.cat==c?'selected':''}>${c}</option>`).join('')}</select></div>${fld('Stock','stock',p.stock??20,'number')}${file('Photo (JPG/PNG/WEBP, max 2 MB)')}<button class="${btn} w-full">${E?'Save Changes':'Upload Product'}</button>${E?'<button type="button" onclick="E=null;render()" class="w-full text-xs font-bold text-gray-400 hover:text-black">Cancel edit</button>':''}</form>`},
+plist=()=>tbl(['Product','Category','Price','Stock',''],P().filter(p=>p.name.toLowerCase().includes(Q)).map(p=>[`<div class="flex items-center gap-3"><img src="${esc(p.img)}" class="w-10 h-12 object-cover rounded"><b>${esc(p.name)}</b></div>`,p.cat,rp(p.price)+(p.old>p.price?` <s class="text-xs text-gray-400">${rp(p.old)}</s>`:''),`<span class="${p.stock<1?'text-red-600 font-bold':''}">${p.stock}</span>`,`<button onclick="A.edit('${p.id}')" class="text-gray-400 hover:text-black"><i class="fa-solid fa-pen"></i></button><button onclick="A.del('${p.id}')" class="ml-4 text-gray-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>`])),
+otbl=(l,ed)=>tbl(['Order','Customer','Items','Payment','Status','Total',''],l.map(o=>[`<b>${o.id}</b><br><span class="text-xs text-gray-400">${o.date}</span>`,esc(o.name),`<span class="text-xs">${o.items.map(i=>i.q+'× '+esc(i.name)).join(', ')}</span>`,`<span class="text-xs">${esc(o.pay)}</span>${o.proof?`<br><a href="${esc(o.proof)}" target="_blank" title="Lihat bukti bayar"><img src="${esc(o.proof)}" class="w-12 h-12 object-cover rounded mt-1 border"></a>`:''}`,ed&&o.status!='Cancelled'?`<select onchange="A.st('${o.id}',this.value)" class="border rounded p-1 text-xs">${STS.map(s=>`<option ${s==o.status?'selected':''}>${s}</option>`).join('')}</select>`:badge(o.status),`<b>${rp(o.total)}</b>`,`<button onclick="invoice('${o.id}')" title="Invoice (.xlsx)" class="text-gray-400 hover:text-red-600"><i class="fa-solid fa-file-excel"></i></button>`])),
+A={
+ async save(e){const d=fd(e),a=P(),old=a.find(p=>p.id==E);let img=old?.img||'https://placehold.co/600x800?text=MOJAKS.CO';
+  if(d.f&&d.f.size){const r=await up(d.f);if(r.err)return;img=r.path}
+  const r={name:d.name,price:+d.price,old:+d.old||0,cat:d.cat,stock:+d.stock,img};
+  old?Object.assign(old,r):a.push({id:nid(),...r});await S('products',a);toast(old?'Produk diperbarui':'Produk ditambahkan');E=null;render()},
+ edit(i){E=i;location.hash='products';render();scrollTo(0,0)},
+ async del(i){if(confirm('Hapus produk ini?')){await S('products',P().filter(p=>p.id!=i));render()}},
+ async st(i,v){const r=await api('ost',{id:i,st:v});if(!r.err)toast('Status: '+v);render()},
+ async blk(i){const a=U(),x=a.find(u=>u.id==i);x.blocked=!x.blocked;await S('users',a);render()},
+ async cfg(e){const d=fd(e);await S('cfg',{fee:+d.fee,free:+d.free});toast('Pengaturan disimpan')},
+ async padd(e){const d=fd(e);let qr='';if(d.f&&d.f.size){const r=await up(d.f,'qr');if(r.err)return;qr=r.path}
+  await S('pay',[...L('pay',[]),{id:nid(),name:d.name,no:d.no,holder:d.holder,note:d.note,qr,on:true}]);toast('Metode ditambahkan');render()},
+ async csave(e){const d=fd(e),a=L('cats',[]),old=a.find(c=>c.id==CE),name=d.name.trim();let img=old?.img||'';
+  if(d.f&&d.f.size){const r=await up(d.f);if(r.err)return;img=r.path}
+  const id=old?old.id:name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||nid();
+  if(!old&&(a.some(c=>c.id==id)||['all','sale'].includes(id)))return toast('Nama kategori sudah dipakai');
+  if(old&&old.name!=name)await S('products',P().map(p=>p.cat==old.name?{...p,cat:name}:p));
+  const r={id,name,desc:d.desc||'',img,on:!!d.on};old?Object.assign(old,r):a.push(r);await S('cats',a);toast('Kategori disimpan');CE=null;render()},
+ cedit(i){CE=i;render();scrollTo(0,0)},
+ async ctog(i){const a=L('cats',[]),c=a.find(x=>x.id==i);c.on=!c.on;await S('cats',a);render()},
+ async cdel(i){const c=L('cats',[]).find(x=>x.id==i);if(P().some(p=>p.cat==c.name))return toast('Pindahkan atau hapus produk di kategori ini dulu');if(confirm('Hapus kategori ini?')){await S('cats',L('cats',[]).filter(x=>x.id!=i));render()}},
+ async asave(e){const d=fd(e),a=L('ann',[]),old=a.find(x=>x.id==AE),r={text:d.text.trim(),link:(d.link||'').trim()};old?Object.assign(old,r):a.push({id:nid(),on:true,...r});await S('ann',a);toast('Pengumuman disimpan');AE=null;render()},
+ aedit(i){AE=i;render()},
+ async atog(i){const a=L('ann',[]),x=a.find(y=>y.id==i);x.on=!x.on;await S('ann',a);render()},
+ async adel(i){if(confirm('Hapus pengumuman ini?')){await S('ann',L('ann',[]).filter(x=>x.id!=i));render()}},
+ async ptog(i){const a=L('pay',[]);const p=a.find(x=>x.id==i);p.on=!p.on;await S('pay',a);render()},
+ async pdel(i){if(confirm('Hapus metode ini?')){await S('pay',L('pay',[]).filter(p=>p.id!=i));render()}}
+};
+/* Flowchart alur pesanan (canvas) - dipakai di layar dan di laporan Excel */
+function flow(c,o){
+ const x=c.getContext('2d'),W=960,H=360,ST=STS.slice(0,5),T=o.length||1,FT='Inter, Arial, sans-serif',
+ CL={Unpaid:'#6b7280',Verifying:'#d97706',Paid:'#16a34a',Shipped:'#7c3aed',Delivered:'#2563eb',Cancelled:'#dc2626'},
+ rr=(a,b,w,h,r)=>{x.beginPath();x.roundRect?x.roundRect(a,b,w,h,r):x.rect(a,b,w,h)},
+ tx=(t,a,b,z,col,wt,al)=>{x.font=`${wt||400} ${z}px ${FT}`;x.fillStyle=col;x.textAlign=al||'left';x.fillText(t,a,b)},
+ card=(a,b,w,h,r)=>{x.save();x.shadowColor='rgba(0,0,0,.10)';x.shadowBlur=18;x.shadowOffsetY=6;x.fillStyle='#fff';rr(a,b,w,h,r);x.fill();x.restore();x.strokeStyle='#e5e7eb';x.lineWidth=1;rr(a+.5,b+.5,w-1,h-1,r);x.stroke()},
+ g=s=>o.filter(a=>a.status==s),sm=l=>l.reduce((t,a)=>t+a.total,0),pd=o.filter(a=>PAID.includes(a.status));
+ x.setTransform(2,0,0,2,0,0);x.fillStyle='#fff';x.fillRect(0,0,W,H);
+ x.fillStyle='#dc2626';x.fillRect(32,26,5,36);
+ tx('ORDER FLOW',48,45,20,'#000',700);tx('Manual payment verification pipeline',48,63,12,'#6b7280');
+ tx('TOTAL SALES',W-32,38,10,'#9ca3af',700,'right');tx(rp(sm(pd)),W-32,62,22,'#000',700,'right');
+ ST.forEach((s,i)=>{
+  const cw=144,gp=44,y=92,ch=156,px=32+i*(cw+gp),n=g(s),p=n.length/T;
+  card(px,y,cw,ch,14);
+  x.fillStyle=CL[s];x.beginPath();x.arc(px+28,y+30,12,0,7);x.fill();tx(i+1,px+28,y+34.5,12,'#fff',700,'center');
+  tx(s.toUpperCase(),px+48,y+34,11,'#374151',700);
+  tx(n.length,px+16,y+86,38,'#000',700);tx(rp(sm(n)),px+16,y+108,13,'#4b5563',600);
+  x.fillStyle='#f3f4f6';rr(px+16,y+122,cw-32,6,3);x.fill();
+  if(p>0){x.fillStyle=CL[s];rr(px+16,y+122,Math.max(6,(cw-32)*p),6,3);x.fill()}
+  tx(Math.round(p*100)+'% of orders',px+16,y+146,10,'#9ca3af',600);
+  if(i<4){const ax=px+cw+10,ay=y+ch/2;x.strokeStyle='#d1d5db';x.lineWidth=2;x.beginPath();x.moveTo(ax,ay);x.lineTo(ax+gp-26,ay);x.stroke();x.fillStyle='#dc2626';x.beginPath();x.moveTo(ax+gp-24,ay-6);x.lineTo(ax+gp-12,ay);x.lineTo(ax+gp-24,ay+6);x.fill()}
+ });
+ const cn=g('Cancelled'),by=272;
+ card(32,by,250,56,12);x.fillStyle='#dc2626';rr(32,by+10,4,36,2);x.fill();
+ tx('CANCELLED',52,by+24,11,'#dc2626',700);tx(cn.length+' orders, '+rp(sm(cn)),52,by+43,13,'#374151',600);
+ [['CONVERSION TO PAID',Math.round(pd.length/T*100)+'%'],['WAITING VERIFICATION',g('Verifying').length],['AVERAGE ORDER',rp(pd.length?sm(pd)/pd.length:0)]].forEach((k,i)=>{const kx=336+i*206;x.fillStyle='#e5e7eb';x.fillRect(kx-18,by+6,1,44);tx(k[0],kx,by+20,10,'#9ca3af',700);tx(k[1],kx,by+46,22,'#000',700)});
+ tx('Sales = Paid + Shipped + Delivered. Payments are verified manually by admin.',32,H-12,11,'#9ca3af',400);
+}
+function post(k){if(k=='analytics')Promise.all(['600','700'].map(w=>document.fonts.load(w+' 14px Inter'))).catch(()=>0).then(()=>{const c=$('#fc');if(c)flow(c,O())})}
+async function report(){
+ await XL();const o=O(),pd=o.filter(x=>PAID.includes(x.status)),wb=new ExcelJS.Workbook(),w=wb.addWorksheet('Summary',{properties:{tabColor:{argb:'FFDC2626'}},views:[{showGridLines:false}]});
+ wb.creator='MOJAKS.CO';w.columns=[2,28,28,28,28,28,2].map(width=>({width}));
+ hdr(w,'SALES REPORT','Generated '+new Date().toLocaleString('id-ID'));
+ [['TOTAL SALES',rev(),RPF],['TOTAL ORDERS',o.length],['WAITING VERIFICATION',o.filter(x=>x.status=='Verifying').length],['CUSTOMERS',C().length],['AVERAGE ORDER',pd.length?Math.round(rev()/pd.length):0,RPF]].forEach((k,i)=>{
+  const c='BCDEF'[i];
+  cl(w,c+7,k[0],{font:{name:'Arial',size:8,bold:true,color:{argb:'FF9CA3AF'}},fill:fl('FFF9FAFB'),border:{top:{style:'medium',color:{argb:'FFDC2626'}}},alignment:{indent:1,vertical:'bottom'}});
+  cl(w,c+8,k[1],{font:{name:'Arial',size:18,bold:true},fill:fl('FFF9FAFB'),numFmt:k[2]||'#,##0',alignment:{horizontal:'left',indent:1,vertical:'middle'}});
+ });
+ w.getRow(7).height=22;w.getRow(8).height=34;
+ w.addImage(wb.addImage({base64:$('#fc').toDataURL('image/png'),extension:'png'}),{tl:{col:1,row:9},ext:{width:960,height:360}});
+ sheet(wb,'Orders',['Order','Date','Customer','Payment','Status','Items','Subtotal','Shipping','Total'],o.map(x=>[x.id,x.date,x.name,x.pay,x.status,x.items.map(i=>i.q+'x '+i.name).join(', '),x.sub,x.ship,x.total]),[6,7,8]).getColumn(6).width=50;
+ sheet(wb,'Products',['Name','Category','Price','Stock'],P().map(p=>[p.name,p.cat,p.price,p.stock]),[2]);
+ dl(wb,'MOJAKS-Report-'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+boot(()=>shell('admin',[['dash','fa-house','Dashboard'],['products','fa-box','Products'],['orders','fa-cart-shopping','Orders'],['payments','fa-credit-card','Payments'],['cats','fa-tags','Categories'],['ann','fa-bullhorn','Announcements'],['customers','fa-users','Customers'],['analytics','fa-chart-line','Analytics'],['settings','fa-gear','Settings']],{
+ dash(){E=null;const o=O(),p=P();return`<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">${st('Total Sales',rp(rev()),'Paid, shipped & delivered')}${st('Total Orders',o.length,o.filter(x=>x.status=='Verifying').length+' to verify')}${st('Active Products',p.length,p.filter(x=>x.stock<1).length+' out of stock')}${st('Total Customers',C().length,'Registered')}</div><div class="grid grid-cols-1 lg:grid-cols-3 gap-10"><div class="lg:col-span-2"><div class="flex justify-between items-center mb-4"><h2 class="font-black uppercase tracking-tighter italic">Recent Orders</h2><a href="#orders" class="text-xs font-bold text-red-600 hover:underline">View All</a></div>${otbl(o.slice(0,5))}</div><div class="bg-white rounded-xl border shadow-sm p-6 h-fit"><h2 class="font-black uppercase tracking-tighter italic mb-6">Quick Add Product</h2>${pform()}</div></div>`},
+ products(){return`<div class="grid lg:grid-cols-3 gap-10"><div class="lg:col-span-2 space-y-4"><input value="${esc(Q)}" oninput="Q=this.value.toLowerCase();$('#pl').innerHTML=plist()" placeholder="Search product..." class="${ip}"><div id="pl">${plist()}</div></div><div class="bg-white rounded-xl border shadow-sm p-6 h-fit"><h2 class="font-black uppercase tracking-tighter italic mb-6">${E?'Edit Product':'Add Product'}</h2>${pform()}</div></div>`},
+ orders(){const l=O().filter(o=>!F||o.status==F);return`<div class="flex flex-wrap items-center gap-3 mb-4"><select onchange="F=this.value;render()" class="${ip} !w-auto">${['',...STS].map(s=>`<option value="${s}" ${s==F?'selected':''}>${s||'All Status'}</option>`).join('')}</select><span class="text-sm text-gray-400">${l.length} orders</span></div><p class="text-xs text-gray-400 mb-4">Cek bukti bayar (klik gambar), lalu pilih <b>Paid</b> jika sesuai atau <b>Unpaid</b> untuk menolak. Setelah itu lanjutkan ke Shipped.</p>${otbl(l,1)}`},
+ payments(){return`<div class="grid lg:grid-cols-3 gap-10"><div class="lg:col-span-2 space-y-4">${L('pay',[]).map(p=>`<div class="bg-white rounded-xl border p-4 flex items-center gap-4">${p.qr?`<img src="${esc(p.qr)}" class="w-16 h-16 object-cover rounded">`:''}<div class="flex-1 text-sm"><b>${esc(p.name)}</b><br>${esc(p.no)}<br>a.n. ${esc(p.holder)}<br><span class="text-xs text-gray-400">${esc(p.note)}</span></div><button onclick="A.ptog('${p.id}')" class="text-xs font-bold ${p.on?'text-green-600':'text-gray-400'}">${p.on?'Active':'Off'}</button><button onclick="A.pdel('${p.id}')" class="text-gray-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button></div>`).join('')||'<p class="text-gray-400">Belum ada metode pembayaran.</p>'}</div><form onsubmit="A.padd(event)" class="bg-white rounded-xl border shadow-sm p-6 space-y-4 h-fit"><h2 class="font-black uppercase tracking-tighter italic">Add Method</h2>${fld('Method (BCA, QRIS, DANA...)','name')}${fld('Account / Number','no')}${fld('Account Holder','holder')}${fld('Instruction','note','','text',1)}${file('QR / Logo (optional)')}<button class="${btn} w-full">Add Method</button></form></div>`},
+ cats(){const l=L('cats',[]),c0=l.find(c=>c.id==CE)||{};return`<div class="grid lg:grid-cols-3 gap-10"><div class="lg:col-span-2">${tbl(['Category','Products','Page','Status',''],l.map(c=>[`<div class="flex items-center gap-3">${c.img?`<img src="${esc(c.img)}" class="w-10 h-12 object-cover rounded">`:''}<div><b>${esc(c.name)}</b><br><span class="text-xs text-gray-400">${esc(c.desc)}</span></div></div>`,P().filter(p=>p.cat==c.name).length,`<a href="category.html?c=${c.id}" target="_blank" class="text-xs font-bold text-red-600 hover:underline">category.html?c=${c.id}</a>`,`<button onclick="A.ctog('${c.id}')" class="text-xs font-bold ${c.on?'text-green-600':'text-gray-400'}">${c.on?'Active':'Off'}</button>`,`<button onclick="A.cedit('${c.id}')" class="text-gray-400 hover:text-black"><i class="fa-solid fa-pen"></i></button><button onclick="A.cdel('${c.id}')" class="ml-4 text-gray-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>`]))}</div><form onsubmit="A.csave(event)" class="bg-white rounded-xl border shadow-sm p-6 space-y-4 h-fit"><h2 class="font-black uppercase tracking-tighter italic">${CE?'Edit':'Add'} Category</h2>${fld('Name','name',esc(c0.name))}${fld('Description','desc',esc(c0.desc),'text',1)}${file('Cover Photo (optional)')}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="on" ${c0.on!==false?'checked':''}> Active (tampil di navbar & beranda)</label><button class="${btn} w-full">${CE?'Save Changes':'Add Category'}</button>${CE?'<button type="button" onclick="CE=null;render()" class="w-full text-xs font-bold text-gray-400 hover:text-black">Cancel edit</button>':''}</form></div>`},
+ ann(){const l=L('ann',[]),a0=l.find(a=>a.id==AE)||{},on=l.filter(a=>a.on);return`<p class="${lb}">Live preview</p><div class="bg-black text-white text-xs py-2 font-semibold tracking-widest overflow-hidden whitespace-nowrap rounded-lg mb-8">${on.length?tickHTML(on):'<span class="px-4 text-gray-400">Belum ada pengumuman aktif. Toko menampilkan info gratis ongkir.</span>'}</div><div class="grid lg:grid-cols-3 gap-10"><div class="lg:col-span-2">${tbl(['Announcement','Link','Status',''],l.map(a=>[esc(a.text),esc(a.link)||'<span class="text-gray-300">-</span>',`<button onclick="A.atog('${a.id}')" class="text-xs font-bold ${a.on?'text-green-600':'text-gray-400'}">${a.on?'Active':'Off'}</button>`,`<button onclick="A.aedit('${a.id}')" class="text-gray-400 hover:text-black"><i class="fa-solid fa-pen"></i></button><button onclick="A.adel('${a.id}')" class="ml-4 text-gray-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>`]))}</div><form onsubmit="A.asave(event)" class="bg-white rounded-xl border shadow-sm p-6 space-y-4 h-fit"><h2 class="font-black uppercase tracking-tighter italic">${AE?'Edit':'Add'} Announcement</h2>${fld('Text','text',esc(a0.text))}${fld('Link (optional)','link',esc(a0.link),'text',1)}<button class="${btn} w-full">${AE?'Save Changes':'Add Announcement'}</button>${AE?'<button type="button" onclick="AE=null;render()" class="w-full text-xs font-bold text-gray-400 hover:text-black">Cancel edit</button>':''}</form></div>`},
+ customers(){return tbl(['Customer','Email','Orders','Spent','Joined','Access'],C().map(u=>{const o=O().filter(x=>x.uid==u.id&&PAID.includes(x.status));return[`<b>${esc(u.name)}</b>`,esc(u.email),O().filter(x=>x.uid==u.id).length,rp(o.reduce((a,x)=>a+x.total,0)),u.joined,`<button onclick="A.blk('${u.id}')" class="text-xs font-bold ${u.blocked?'text-green-600':'text-red-600'}">${u.blocked?'Unblock':'Block'}</button>`]}))},
+ analytics(){return`<div class="flex justify-between items-center mb-4"><h2 class="font-black uppercase tracking-tighter italic">Order Flow</h2><button onclick="report()" class="${btn}"><i class="fa-solid fa-file-excel mr-2"></i>Export Excel</button></div><canvas id="fc" width="1920" height="720" class="w-full bg-white rounded-xl border shadow-sm"></canvas>`},
+ settings(){const c=L('cfg');return`<div class="grid md:grid-cols-2 gap-6"><form onsubmit="A.cfg(event)" class="bg-white rounded-xl border shadow-sm p-6 space-y-4"><h2 class="font-black uppercase italic">Shipping</h2>${fld('Shipping Fee (Rp)','fee',c.fee,'number')}${fld('Free Shipping Min. Order (Rp)','free',c.free,'number')}<button class="${btn}">Save</button></form>${pwForm}</div>`}
+}));
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | MOJAKS.CO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+<script src="app.js"></script>
+<div class="bg-white w-full max-w-sm rounded-xl border shadow-sm p-8">
+    <a href="index.html" class="block text-2xl font-black tracking-tighter mb-6">MOJAKS<span class="text-red-600">.CO</span></a>
+    <div class="flex border-b mb-6 text-sm font-bold uppercase">
+        <button id="t0" class="flex-1 pb-3"></button><button id="t1" class="flex-1 pb-3"></button>
+    </div>
+    <form id="f" class="space-y-4"></form>
+    </div>
+<script>
+let R=0;
+const draw=()=>{
+    $('#t0').textContent='Masuk';$('#t1').textContent='Daftar';
+    $('#t0').className='flex-1 pb-3 border-b-2 '+(R?'border-transparent text-gray-400':'border-red-600');
+    $('#t1').className='flex-1 pb-3 border-b-2 '+(R?'border-red-600':'border-transparent text-gray-400');
+    $('#f').innerHTML=(R?fld('Name','name'):'')+fld('Email','email','','email')+fld('Password','pw','','password')+`<button class="${btn} w-full">${R?'Buat Akun':'Masuk'}</button>`;
+};
+$('#t0').onclick=()=>{R=0;draw()};$('#t1').onclick=()=>{R=1;draw()};
+$('#f').onsubmit=async e=>{
+    const r=await api(R?'register':'login',fd(e));if(r.err)return;
+    location=new URLSearchParams(location.search).get('next')||(me().role=='admin'?'dashboard.html':'user.html');
+};
+boot(()=>{if(me())location=me().role=='admin'?'dashboard.html':'user.html';draw()});
+</script>
+</body>
+</html>

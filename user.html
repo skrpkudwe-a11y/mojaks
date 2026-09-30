@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Account | MOJAKS.CO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 flex">
+<script src="app.js"></script>
+<script>
+let PM=''; // id metode pembayaran terpilih
+const my=()=>L('orders',[]),cart=()=>JSON.parse(localStorage.cart||'[]'),
+sv=c=>{localStorage.cart=JSON.stringify(c);render()},
+sum=c=>{const s=c.reduce((a,i)=>a+i.price*i.quantity,0),f=L('cfg');return{s,ship:!s||s>=f.free?0:f.fee}},
+otbl=l=>tbl(['Order','Items','Payment','Status','Total',''],l.map(o=>{const p=L('pay',[]).find(x=>x.name==o.pay),open=['Unpaid','Verifying'].includes(o.status);return[`<b>${o.id}</b><br><span class="text-xs text-gray-400">${o.date}</span>`,`<span class="text-xs">${o.items.map(i=>i.q+'× '+esc(i.name)).join(', ')}</span>`,`<span class="text-xs"><b>${esc(o.pay)}</b>${open&&p?`<br>${esc(p.no)}<br>a.n. ${esc(p.holder)}`:''}</span>${o.proof?`<br><a href="${esc(o.proof)}" target="_blank"><img src="${esc(o.proof)}" class="w-10 h-10 object-cover rounded mt-1 border"></a>`:''}`,badge(o.status),`<b>${rp(o.total)}</b>`,`<div class="flex flex-col gap-1 items-start text-xs font-bold">${open?`<label class="text-red-600 cursor-pointer">${o.proof?'Ganti bukti':'Upload bukti bayar'}<input type="file" accept="image/*" hidden onchange="A.proof('${o.id}',this.files[0])"></label><button onclick="A.cancel('${o.id}')" class="text-gray-400 hover:text-red-600">Cancel</button>`:''}${o.status=='Shipped'?`<button onclick="A.got('${o.id}')" class="text-green-600">Received</button>`:''}<button onclick="invoice('${o.id}')" class="text-gray-500 hover:text-black"><i class="fa-solid fa-file-excel"></i> Invoice</button></div>`]}));
+const A={
+ q(i,d){const c=cart();c[i].quantity+=d;if(c[i].quantity<1)c.splice(i,1);sv(c)},
+ rm(i){const c=cart();c.splice(i,1);sv(c)},
+ async co(){const c=cart();if(!c.length)return toast('Keranjang kosong');const r=await api('order',{cart:c,pay:PM});if(r.err)return;localStorage.removeItem('cart');toast('Pesanan dibuat. Transfer lalu upload bukti bayar.');location.hash='orders';render()},
+ async proof(id,f){if(!f)return;const u=new FormData();u.append('f',f);u.append('oid',id);const r=await api('proof',0,u);if(!r.err){toast('Bukti terkirim, menunggu verifikasi admin');render()}},
+ async cancel(i){if(confirm('Batalkan pesanan ini?')){await api('ost',{id:i,st:'Cancelled'});render()}},
+ async got(i){await api('ost',{id:i,st:'Delivered'});toast('Terima kasih!');render()},
+ async prof(e){const r=await api('prof',fd(e));if(!r.err)toast('Profil disimpan')}
+};
+boot(()=>shell('user',[['home','fa-house','Overview'],['orders','fa-box','My Orders'],['cart','fa-cart-shopping','Cart'],['profile','fa-user','Profile']],{
+ home(){const o=my();return`<div class="grid md:grid-cols-3 gap-6 mb-10">${st('Total Orders',o.length,'All time')}${st('Need Action',o.filter(x=>['Unpaid','Shipped'].includes(x.status)).length,'Unpaid or ready to confirm')}${st('Total Spent',rp(o.filter(x=>['Paid','Shipped','Delivered'].includes(x.status)).reduce((a,x)=>a+x.total,0)),'Verified payments')}</div><div class="flex justify-between items-center mb-4"><h2 class="font-black uppercase tracking-tighter italic">Recent Orders</h2><a href="#orders" class="text-xs font-bold text-red-600 hover:underline">View All</a></div>${otbl(o.slice(0,3))}<a href="index.html" class="${btn} inline-block mt-6">Continue Shopping</a>`},
+ orders(){return otbl(my())},
+ cart(){const c=cart(),{s,ship}=sum(c),pm=L('pay',[]);if(!pm.find(p=>p.id==PM))PM=pm[0]?.id||'';return c.length?`<div class="grid lg:grid-cols-3 gap-10"><div class="lg:col-span-2 space-y-4">${c.map((i,n)=>`<div class="bg-white rounded-xl border p-4 flex items-center gap-4"><img src="${esc(i.img)}" class="w-16 h-20 object-cover rounded"><div class="flex-1"><b class="text-sm">${esc(i.name)}</b><p class="text-red-600 text-sm font-bold">${rp(i.price)}</p><div class="flex gap-3 mt-2 font-bold"><button onclick="A.q(${n},-1)">-</button>${i.quantity}<button onclick="A.q(${n},1)">+</button></div></div><button onclick="A.rm(${n})" class="text-gray-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button></div>`).join('')}</div><div class="bg-white rounded-xl border p-6 h-fit space-y-3 text-sm"><div class="flex justify-between"><span>Subtotal</span><b>${rp(s)}</b></div><div class="flex justify-between"><span>Shipping</span><b>${ship?rp(ship):'Free'}</b></div><div class="flex justify-between text-lg border-t pt-3"><span>Total</span><b>${rp(s+ship)}</b></div><p class="${lb} pt-2">Payment Method</p>${pm.map(p=>`<label class="flex gap-3 p-3 border rounded-lg cursor-pointer ${p.id==PM?'border-black':''}"><input type="radio" name="pm" ${p.id==PM?'checked':''} onchange="PM='${p.id}';render()"><span class="flex-1"><b>${esc(p.name)}</b><br>${esc(p.no)}<br>a.n. ${esc(p.holder)}<br><span class="text-xs text-gray-400">${esc(p.note)}</span></span>${p.qr?`<img src="${esc(p.qr)}" class="w-16 h-16 rounded">`:''}</label>`).join('')||'<p class="text-xs text-red-600">Admin belum menambahkan metode pembayaran.</p>'}<p class="text-xs text-gray-400">Ship to: ${esc(me().addr)||'<a href="#profile" class="text-red-600 font-bold">set address</a>'}</p><button onclick="A.co()" class="${btn} w-full">Place Order</button><p class="text-[11px] text-gray-400">Pembayaran diverifikasi manual oleh admin setelah kamu upload bukti transfer.</p></div></div>`:`<p class="text-gray-400">Keranjang kosong. <a href="index.html" class="text-red-600 font-bold">Mulai belanja</a></p>`},
+ profile(){const u=me();return`<div class="grid md:grid-cols-2 gap-6"><form onsubmit="A.prof(event)" class="bg-white rounded-xl border shadow-sm p-6 space-y-4"><h2 class="font-black uppercase italic">My Details</h2>${fld('Name','name',esc(u.name))}${fld('Phone','phone',esc(u.phone),'tel',1)}<div><label class="${lb}">Shipping Address</label><textarea name="addr" rows="3" class="${ip}">${esc(u.addr)}</textarea></div><button class="${btn}">Save</button></form>${pwForm}</div>`}
+}));
+</script>
+</body>
+</html>
